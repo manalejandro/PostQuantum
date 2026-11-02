@@ -1,0 +1,21 @@
+{
+  "hints": [
+    {
+      "name": "postquantum.parameter-set",
+      "values": [
+        {
+          "value": "ML-KEM-512",
+          "description": "NIST security category 1. Smallest keys, lowest security margin."
+        },
+        {
+          "value": "ML-KEM-768",
+          "description": "NIST security category 3. Recommended default for most applications."
+        },
+        {
+          "value": "ML-KEM-1024",
+          "description": "NIST security category 5. Largest keys, highest security margin."
+        }
+      ]
+    }
+  ]
+}

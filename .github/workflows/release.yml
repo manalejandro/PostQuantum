@@ -1,0 +1,85 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to publish (for example v0.1.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish jar
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Resolve release tag
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ inputs.tag || github.ref_name }}"
+          if [[ -z "$tag" ]]; then
+            echo "::error::No tag supplied. Push a v* tag or pass the tag input."
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Check tag matches the project version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(./mvnw -B --no-transfer-progress -q help:evaluate -Dexpression=project.version -DforceStdout)"
+          expected="v${version}"
+          actual="${{ steps.meta.outputs.tag }}"
+          if [[ "$actual" != "$expected" ]]; then
+            echo "::error::Tag $actual does not match the Maven version. Expected $expected."
+            exit 1
+          fi
+          echo "Releasing $actual"
+
+      - name: Build, test and package
+        run: ./mvnw -B --no-transfer-progress clean verify
+
+      - name: Generate checksums
+        shell: bash
+        working-directory: target
+        run: |
+          set -euo pipefail
+          sha256sum postquantum-*.jar > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.TOKEN }}
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: PostQuantum ${{ steps.meta.outputs.tag }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          prerelease: ${{ contains(steps.meta.outputs.tag, '-') }}
+          files: |
+            target/postquantum-*.jar
+            target/SHA256SUMS
