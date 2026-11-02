@@ -79,6 +79,45 @@ class MlKemTest {
 
     @ParameterizedTest
     @EnumSource(MlKemParameterSet.class)
+    void derivesTheSameKeyPairFromTheSameSeed(MlKemParameterSet parameterSet) {
+        MlKem mlKem = MlKem.getInstance(parameterSet);
+        byte[] seed = new byte[64];
+        for (int i = 0; i < seed.length; i++) {
+            seed[i] = (byte) i;
+        }
+
+        MlKemKeyPair first = mlKem.generateKeyPair(seed);
+        MlKemKeyPair second = mlKem.generateKeyPair(seed.clone());
+
+        assertThat(first).isEqualTo(second);
+        assertThat(first.publicKey()).isEqualTo(second.publicKey());
+        assertThat(first.privateKey()).isEqualTo(second.privateKey());
+
+        byte[] otherSeed = seed.clone();
+        otherSeed[0] ^= 0x01;
+        assertThat(mlKem.generateKeyPair(otherSeed).publicKey()).isNotEqualTo(first.publicKey());
+
+        MlKemEncapsulation encapsulation = mlKem.encapsulate(first.publicKey());
+        assertThat(mlKem.decapsulate(first.privateKey(), encapsulation.getCiphertext()))
+                .isEqualTo(encapsulation.getSharedSecret());
+    }
+
+    @Test
+    void rejectsSeedsWithTheWrongLength() {
+        MlKem mlKem = MlKem.getInstance(MlKemParameterSet.ML_KEM_768);
+
+        assertThatThrownBy(() -> mlKem.generateKeyPair(new byte[63]))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("64 bytes");
+        assertThatThrownBy(() -> mlKem.generateKeyPair(new byte[65]))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("64 bytes");
+        assertThatThrownBy(() -> mlKem.generateKeyPair(null))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @ParameterizedTest
+    @EnumSource(MlKemParameterSet.class)
     void rejectsTamperedCiphertextsThroughImplicitRejection(MlKemParameterSet parameterSet) {
         MlKem mlKem = MlKem.getInstance(parameterSet);
         MlKemKeyPair keyPair = mlKem.generateKeyPair();

@@ -37,6 +37,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class JdkMlKemInteropTest {
 
+    /** Length of the FIPS 203 seed, the concatenation of {@code d} and {@code z}. */
+    private static final int SEED_LENGTH = 64;
+
     @ParameterizedTest
     @EnumSource(MlKemParameterSet.class)
     void jdkDecapsulatesOurCiphertext(MlKemParameterSet parameterSet) throws Exception {
@@ -65,8 +68,7 @@ class JdkMlKemInteropTest {
         assumeJdkMlKemIsAvailable();
 
         KeyPair jdkKeyPair = KeyPairGenerator.getInstance(parameterSet.algorithmName()).generateKeyPair();
-        MlKemPrivateKey privateKey = MlKemPrivateKey.fromEncoded(
-                parameterSet, tail(jdkKeyPair.getPrivate().getEncoded(), parameterSet.decapsulationKeyLength()));
+        MlKemPrivateKey privateKey = privateKeyOf(parameterSet, jdkKeyPair);
 
         Object kem = newKem(parameterSet.algorithmName());
         Object encapsulator = kem.getClass()
@@ -113,6 +115,29 @@ class JdkMlKemInteropTest {
         Class<?> kemClass = Class.forName("javax.crypto.KEM");
         Method getInstance = kemClass.getMethod("getInstance", String.class);
         return getInstance.invoke(null, algorithmName);
+    }
+
+    /**
+     * Converts a JDK ML-KEM private key into our representation. JDK 24 encodes the expanded
+     * decapsulation key in the PKCS#8 structure; JDK 25 and later encode the 64 byte seed
+     * instead, so the key pair has to be derived again.
+     */
+    private static MlKemPrivateKey privateKeyOf(MlKemParameterSet parameterSet, KeyPair jdkKeyPair) {
+        byte[] encoded = jdkKeyPair.getPrivate().getEncoded();
+        int keyLength = parameterSet.decapsulationKeyLength();
+        if (encoded.length > keyLength) {
+            return MlKemPrivateKey.fromEncoded(
+                    parameterSet, Arrays.copyOfRange(encoded, encoded.length - keyLength, encoded.length));
+        }
+
+        byte[] seed = Arrays.copyOfRange(encoded, encoded.length - SEED_LENGTH, encoded.length);
+        MlKemKeyPair keyPair = MlKem.getInstance(parameterSet).generateKeyPair(seed);
+        MlKemPublicKey jdkPublicKey = MlKemPublicKey.fromEncoded(
+                parameterSet, tail(jdkKeyPair.getPublic().getEncoded(), parameterSet.encapsulationKeyLength()));
+        assertThat(keyPair.publicKey())
+                .as("the seed in the PKCS#8 encoding must reproduce the JDK public key")
+                .isEqualTo(jdkPublicKey);
+        return keyPair.privateKey();
     }
 
     private static byte[] tail(byte[] encoded, int length) {

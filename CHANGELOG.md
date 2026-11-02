@@ -13,7 +13,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Pure Java implementation of ML-KEM as standardised by FIPS 203, with support for ML-KEM-512,
   ML-KEM-768 and ML-KEM-1024.
-- `MlKem` public API with key generation, encapsulation, decapsulation and key validation.
+- `MlKem` public API with key generation, encapsulation, decapsulation and key validation,
+  including deterministic key generation from a 64 byte FIPS 203 seed.
 - `MlKemPublicKey`, `MlKemPrivateKey`, `MlKemKeyPair` and `MlKemEncapsulation` value types with
   defensive copies and redacted `toString()` output.
 - FIPS 203 implicit rejection with a branch-free constant-time selection.
@@ -24,7 +25,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Optional Actuator health indicator that performs a full ML-KEM and hybrid cipher round trip.
 - Validation against the official NIST ACVP vectors: 240 cases covering key generation,
   encapsulation, decapsulation and key checks.
-- Cross-checks against the ML-KEM implementation in JDK 24 (`javax.crypto.KEM`).
+- Cross-checks against the ML-KEM implementation in JDK 24 and JDK 25 (`javax.crypto.KEM`),
+  covering both the expanded and the seed-only private key encodings.
 - MIT license, README, security policy and GitHub Actions CI workflow.
 
 [Unreleased]: https://github.com/manalejandro/postquantum/compare/v0.1.0...HEAD

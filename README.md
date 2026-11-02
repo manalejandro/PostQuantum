@@ -70,8 +70,9 @@ plus a Spring Boot auto-configuration so applications can inject either one as a
   optional associated data and parameter-set binding.
 - **Spring Boot auto-configuration**: `MlKem` and `HybridCipher` beans, externalised
   configuration, and an Actuator health indicator that runs a real crypto self-test.
-- **Interoperable**: keys and ciphertexts are the raw FIPS 203 encodings, and the test suite
-  cross-checks them against the ML-KEM implementation in JDK 24 (`javax.crypto.KEM`).
+- **Interoperable**: keys and ciphertexts are the raw FIPS 203 encodings, deterministic key
+  generation is available from the 64 byte seed, and the test suite cross-checks both against the
+  ML-KEM implementation in JDK 24 and JDK 25 (`javax.crypto.KEM`).
 - **MIT licensed** and documented for reuse.
 
 ## Requirements
@@ -186,6 +187,22 @@ tampered envelope fails with `HybridDecryptionException`.
 length, a key from another parameter set, or a key that fails the FIPS 203 modulus/hash checks.
 Use `MlKem#isValidEncapsulationKey` and `MlKem#isValidDecapsulationKey` to validate untrusted
 key material before using it.
+
+### Key material from other implementations
+
+Keys and ciphertexts are the raw FIPS 203 byte strings, so any conforming implementation can
+exchange them. `MlKem#generateKeyPair(byte[])` also accepts the 64 byte FIPS 203 seed (`d || z`),
+which is what you need to import a key from a KMS, restore a backup or replay a test vector:
+
+```java
+MlKemKeyPair keyPair = mlKem.generateKeyPair(seed);   // 64 bytes: d followed by z
+```
+
+The JDK changed how it stores ML-KEM private keys between releases. Java 24 wraps the expanded
+decapsulation key in the PKCS#8 structure, so its trailing bytes can be passed straight to
+`MlKemPrivateKey.fromEncoded`. Java 25 wraps the 64 byte seed instead; hand that seed to
+`generateKeyPair` to rebuild the pair. Public keys did not change: the trailing
+`encapsulationKeyLength()` bytes of the X.509 encoding are the raw encapsulation key.
 
 ## Encrypting data: the hybrid cipher
 
@@ -387,38 +404,14 @@ The test suite contains:
 - **`HkdfTest`** — RFC 5869 HKDF-SHA256 test vectors.
 - **`MlKemTest`** — public API behaviour, implicit rejection, input validation, immutability.
 - **`HybridCipherTest`** — round trips, tamper detection, AAD binding, envelope parsing.
-- **`JdkMlKemInteropTest`** — cross-checks raw keys and ciphertexts against the JDK 24
-  `javax.crypto.KEM` ML-KEM implementation (skipped on older JDKs).
+- **`JdkMlKemInteropTest`** — cross-checks raw keys and ciphertexts against the ML-KEM
+  implementation in JDK 24 and JDK 25 (`javax.crypto.KEM`), covering both private key encodings
+  (skipped on older JDKs).
 - **`PostQuantumAutoConfigurationTest`** and **`MlKemHealthIndicatorTest`** — Spring wiring,
   property binding, bean back-off and health reporting.
 
 The ACVP vectors live in `src/test/resources/acvp/ml-kem-fips203.json.gz` and can be regenerated
 with `python3 tools/fetch-acvp-vectors.py`.
-
-## Releasing
-
-Releases are published by the [Release workflow](.github/workflows/release.yml). It builds,
-tests and packages the library, generates `SHA256SUMS`, and attaches the main jar plus the
-`-sources` and `-javadoc` jars to the GitHub Release for the tag.
-
-```bash
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-The tag must match the Maven version, so bump `<version>` in `pom.xml` before tagging: the
-workflow fails when `v0.1.0` and `0.1.0` disagree. A manual run from the Actions tab is also
-possible; it asks for the tag to publish.
-
-The workflow authenticates with the `TOKEN` repository secret:
-
-```bash
-gh secret set TOKEN --body "<personal access token with contents:write>"
-```
-
-`TOKEN` must be a fine-grained personal access token (or a classic token with the `repo` scope)
-that is allowed to create releases in this repository. Without it the workflow cannot upload the
-artifacts.
 
 ## Project layout
 

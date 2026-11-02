@@ -117,6 +117,12 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-javadoc-plugin</artifactId>
+				<configuration>
+					<!-- maven-javadoc-plugin 3.12 adds the no-fonts flag even on Java 17, where
+					     javadoc rejects it. Keep the default fonts so the jar builds on every
+					     supported JDK. -->
+					<disableNoFonts>true</disableNoFonts>
+				</configuration>
 				<executions>
 					<execution>
 						<id>attach-javadocs</id>

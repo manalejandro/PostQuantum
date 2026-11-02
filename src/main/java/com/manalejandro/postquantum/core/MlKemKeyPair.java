@@ -17,6 +17,8 @@ public record MlKemKeyPair(MlKemPublicKey publicKey, MlKemPrivateKey privateKey)
     /**
      * Validates that both keys are present and use the same parameter set.
      *
+     * @param publicKey the encapsulation key to publish
+     * @param privateKey the decapsulation key to keep secret
      * @throws IllegalArgumentException when a key is missing or the parameter sets differ
      */
     public MlKemKeyPair {

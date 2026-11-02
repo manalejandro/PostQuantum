@@ -9,6 +9,7 @@ package com.manalejandro.postquantum.core;
 import com.manalejandro.postquantum.core.internal.MlKemEngine;
 
 import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.Objects;
 
 /**
@@ -94,6 +95,30 @@ public final class MlKem {
         secureRandom.nextBytes(d);
         secureRandom.nextBytes(z);
         return generateKeyPair(d, z);
+    }
+
+    /**
+     * Derives a key pair from a 64 byte seed, as described by FIPS 203, Algorithm 19.
+     *
+     * <p>The seed is the concatenation of the {@code d} and {@code z} values used by the
+     * standard, which is also how the JDK stores ML-KEM private keys from Java 25 onwards. The
+     * same seed always produces the same key pair, so this overload is meant for importing key
+     * material from a KMS or an HSM, for restoring a backup, and for test vectors. For regular
+     * key generation use {@link #generateKeyPair()}.
+     *
+     * @param seed the 64 byte seed, holding {@code d} followed by {@code z}
+     * @return the key pair derived from the seed
+     * @throws IllegalArgumentException when the seed is not 64 bytes long
+     */
+    public MlKemKeyPair generateKeyPair(byte[] seed) {
+        Objects.requireNonNull(seed, "seed must not be null");
+        if (seed.length != 2 * SEED_LENGTH) {
+            throw new IllegalArgumentException("seed must be " + (2 * SEED_LENGTH)
+                    + " bytes long but got " + seed.length);
+        }
+        return generateKeyPair(
+                Arrays.copyOfRange(seed, 0, SEED_LENGTH),
+                Arrays.copyOfRange(seed, SEED_LENGTH, 2 * SEED_LENGTH));
     }
 
     /**
