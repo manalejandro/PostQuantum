@@ -1,19 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
 		<version>4.1.2</version>
-		<relativePath/>
+		<relativePath />
 	</parent>
 	<groupId>com.manalejandro</groupId>
 	<artifactId>postquantum</artifactId>
 	<version>0.1.0</version>
 	<packaging>jar</packaging>
 	<name>PostQuantum</name>
-	<description>FIPS 203 (ML-KEM) post-quantum key encapsulation and hybrid encryption for Spring Boot applications</description>
+	<description>FIPS 203 (ML-KEM) post-quantum key encapsulation and hybrid
+		encryption for Spring Boot applications</description>
 	<url>https://github.com/manalejandro/postquantum</url>
 
 	<licenses>
@@ -34,7 +36,8 @@
 
 	<scm>
 		<connection>scm:git:https://github.com/manalejandro/postquantum.git</connection>
-		<developerConnection>scm:git:ssh://git@github.com/manalejandro/postquantum.git</developerConnection>
+		<developerConnection>
+			scm:git:ssh://git@github.com/manalejandro/postquantum.git</developerConnection>
 		<url>https://github.com/manalejandro/postquantum</url>
 		<tag>HEAD</tag>
 	</scm>
@@ -132,7 +135,8 @@
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-javadoc-plugin</artifactId>
 				<configuration>
-					<!-- maven-javadoc-plugin 3.12 adds the no-fonts flag even on Java 17, where
+					<!-- maven-javadoc-plugin 3.12 adds the no-fonts flag even
+					on Java 17, where
 					     javadoc rejects it. Keep the default fonts so the jar builds on every
 					     supported JDK. -->
 					<disableNoFonts>true</disableNoFonts>
@@ -148,5 +152,49 @@
 			</plugin>
 		</plugins>
 	</build>
+
+	<profiles>
+		<!--
+			Release profile, enabled with -Pcentral. It signs every artifact with GPG and
+			publishes them to Maven Central through the Sonatype Central Portal. It is opt-in
+			so that a plain `mvn verify` never needs a signing key or the Central credentials.
+		-->
+		<profile>
+			<id>central</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-gpg-plugin</artifactId>
+						<version>3.2.8</version>
+						<configuration>
+							<bestPractices>true</bestPractices>
+						</configuration>
+						<executions>
+							<execution>
+								<id>sign-artifacts</id>
+								<phase>verify</phase>
+								<goals>
+									<goal>sign</goal>
+								</goals>
+							</execution>
+						</executions>
+					</plugin>
+
+					<plugin>
+						<groupId>org.sonatype.central</groupId>
+						<artifactId>central-publishing-maven-plugin</artifactId>
+						<version>0.12.0</version>
+						<extensions>true</extensions>
+						<configuration>
+							<publishingServerId>central</publishingServerId>
+							<autoPublish>true</autoPublish>
+							<waitUntil>published</waitUntil>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
 
 </project>

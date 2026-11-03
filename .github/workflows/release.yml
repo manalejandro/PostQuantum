@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   release:
-    name: Build and publish jar
+    name: Sign, publish to Maven Central and create the GitHub release
     runs-on: ubuntu-latest
 
     steps:
@@ -60,15 +60,71 @@ jobs:
           fi
           echo "Releasing $actual"
 
-      - name: Build, test and package
-        run: ./mvnw -B --no-transfer-progress clean verify
+      - name: Import the release signing key
+        id: signing
+        shell: bash
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$GPG_PRIVATE_KEY" ]]; then
+            echo "::error::The GPG_PRIVATE_KEY secret is not configured."
+            exit 1
+          fi
+          install -m 700 -d "$HOME/.gnupg"
+          printf '%s\n' "$GPG_PRIVATE_KEY" | gpg --batch --import
+          fingerprint="$(gpg --batch --list-secret-keys --with-colons | awk -F: '/^fpr:/ {print $10; exit}')"
+          if [[ -z "$fingerprint" ]]; then
+            echo "::error::No secret key was imported from GPG_PRIVATE_KEY."
+            exit 1
+          fi
+          echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
+          echo "Signing with $fingerprint"
+
+      - name: Configure the Maven Central credentials
+        shell: bash
+        env:
+          CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+          CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$CENTRAL_USERNAME" || -z "$CENTRAL_PASSWORD" ]]; then
+            echo "::error::The CENTRAL_USERNAME and CENTRAL_PASSWORD secrets are not configured."
+            exit 1
+          fi
+          install -m 700 -d "$HOME/.m2"
+          cat > "$HOME/.m2/settings.xml" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
+                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                    xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0 https://maven.apache.org/xsd/settings-1.2.0.xsd">
+            <servers>
+              <server>
+                <id>central</id>
+                <username>${CENTRAL_USERNAME}</username>
+                <password>${CENTRAL_PASSWORD}</password>
+              </server>
+            </servers>
+          </settings>
+          EOF
+          chmod 600 "$HOME/.m2/settings.xml"
+
+      - name: Build, sign and publish to Maven Central
+        shell: bash
+        env:
+          # Empty when the signing key has no passphrase, which is the normal case here.
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          ./mvnw -B --no-transfer-progress -Pcentral clean deploy \
+            -Dgpg.keyname="${{ steps.signing.outputs.fingerprint }}"
 
       - name: Generate checksums
         shell: bash
         working-directory: target
         run: |
           set -euo pipefail
-          sha256sum postquantum-*.jar > SHA256SUMS
+          sha256sum postquantum-*.jar postquantum-*.pom > SHA256SUMS
           cat SHA256SUMS
 
       - name: Publish GitHub release
@@ -82,4 +138,6 @@ jobs:
           prerelease: ${{ contains(steps.meta.outputs.tag, '-') }}
           files: |
             target/postquantum-*.jar
+            target/postquantum-*.pom
+            target/postquantum-*.asc
             target/SHA256SUMS
