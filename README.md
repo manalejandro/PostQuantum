@@ -1,6 +1,7 @@
 # PostQuantum
 
 [![CI](https://github.com/manalejandro/postquantum/actions/workflows/ci.yml/badge.svg)](https://github.com/manalejandro/postquantum/actions/workflows/ci.yml)
+[![Maven Central](https://img.shields.io/maven-central/v/com.manalejandro/postquantum.svg?label=Maven%20Central)](https://central.sonatype.com/artifact/com.manalejandro/postquantum)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Java 17+](https://img.shields.io/badge/Java-17%2B-orange.svg)](https://adoptium.net/)
 [![FIPS 203](https://img.shields.io/badge/FIPS-203-informational.svg)](https://doi.org/10.6028/NIST.FIPS.203)
@@ -37,6 +38,7 @@ byte[] sharedSecret = mlKem.decapsulate(keyPair.privateKey(), encapsulation.getC
 - [Security notes](#security-notes)
 - [Performance](#performance)
 - [Building and testing](#building-and-testing)
+- [Releasing](#releasing)
 - [Project layout](#project-layout)
 - [Compatibility](#compatibility)
 - [Contributing](#contributing)
@@ -88,16 +90,8 @@ Quarkus, Micronaut or any other runtime. Spring is only needed for the `autoconf
 
 ## Installation
 
-The library is published as `com.manalejandro:postquantum`. Until it is available in Maven
-Central, install it locally:
-
-```bash
-git clone https://github.com/manalejandro/postquantum.git
-cd postquantum
-./mvnw install
-```
-
-Then declare the dependency.
+The library is published as `com.manalejandro:postquantum` on Maven Central. Declare the
+dependency:
 
 **Maven**
 
@@ -113,6 +107,14 @@ Then declare the dependency.
 
 ```kotlin
 implementation("com.manalejandro:postquantum:0.1.0")
+```
+
+To build from source instead, clone the repository and install it into your local repository:
+
+```bash
+git clone https://github.com/manalejandro/postquantum.git
+cd postquantum
+./mvnw install
 ```
 
 Because the artifact is a library, do not add `spring-boot-maven-plugin` to it; the jar contains
@@ -412,6 +414,47 @@ The test suite contains:
 
 The ACVP vectors live in `src/test/resources/acvp/ml-kem-fips203.json.gz` and can be regenerated
 with `python3 tools/fetch-acvp-vectors.py`.
+
+## Releasing
+
+Releases are cut from a tag and published by the `Release` workflow. It signs every artifact with
+GPG, deploys the bundle to Maven Central through the Sonatype Central Portal, waits for Central to
+accept it, and then creates the GitHub release with the jars, the POM, their `.asc` signatures and
+`SHA256SUMS`.
+
+1. Bump `<version>` in `pom.xml` and update `CHANGELOG.md`.
+2. Commit and push `main`, then create and push the tag:
+
+   ```bash
+   git tag -a v0.1.0 -m "PostQuantum 0.1.0"
+   git push origin main
+   git push origin v0.1.0
+   ```
+
+3. The workflow verifies that the tag matches the project version before doing anything else. It
+   can also be re-run from the Actions tab with `workflow_dispatch`, passing the tag as input.
+
+The workflow expects four repository secrets:
+
+| Secret | Purpose |
+|--------|---------|
+| `CENTRAL_USERNAME` | Sonatype Central Portal user token name |
+| `CENTRAL_PASSWORD` | Sonatype Central Portal user token password |
+| `GPG_PRIVATE_KEY` | ASCII-armored private key used to sign the artifacts |
+| `TOKEN` | GitHub token used to create the release |
+
+Add `GPG_PASSPHRASE` only if the signing key is protected; the plugin reads it from that variable
+and falls back to an unprotected key. The public half of the signing key must be published on a
+keyserver (`keys.openpgp.org` or `keyserver.ubuntu.com`) for Central to validate the signatures.
+
+To reproduce a release locally, with the key in your keyring and the `central` server credentials
+in `~/.m2/settings.xml`:
+
+```bash
+./mvnw -Pcentral clean deploy -Dgpg.keyname=<fingerprint>
+```
+
+The `central` profile is opt-in, so a plain `./mvnw verify` never needs a signing key.
 
 ## Project layout
 

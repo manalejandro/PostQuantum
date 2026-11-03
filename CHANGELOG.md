@@ -7,7 +7,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-11-02
+## [0.1.0] - 2026-11-03
 
 ### Added
 
@@ -28,6 +28,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Cross-checks against the ML-KEM implementation in JDK 24 and JDK 25 (`javax.crypto.KEM`),
   covering both the expanded and the seed-only private key encodings.
 - MIT license, README, security policy and GitHub Actions CI workflow.
+- GPG-signed artifacts published to Maven Central from the release workflow, with an opt-in
+  `central` profile so that local builds do not need a signing key.
 
 [Unreleased]: https://github.com/manalejandro/postquantum/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/manalejandro/postquantum/releases/tag/v0.1.0
