@@ -6,6 +6,9 @@
 
 package com.manalejandro.postquantum.core;
 
+import com.manalejandro.postquantum.core.internal.MlKemEngine;
+
+import java.security.MessageDigest;
 import java.util.Arrays;
 import java.util.Objects;
 
@@ -33,6 +36,7 @@ public final class MlKemPrivateKey {
      * @param encoded the FIPS 203 encoding of the key
      * @return an immutable key object
      * @throws IllegalArgumentException when the encoded length does not match the parameter set
+     *     or the key fails the FIPS 203 input validation (hash check and modulus check)
      */
     public static MlKemPrivateKey fromEncoded(MlKemParameterSet parameterSet, byte[] encoded) {
         Objects.requireNonNull(parameterSet, "parameterSet must not be null");
@@ -41,6 +45,22 @@ public final class MlKemPrivateKey {
             throw new IllegalArgumentException("invalid decapsulation key length: expected "
                     + parameterSet.decapsulationKeyLength() + " bytes but got " + encoded.length);
         }
+        byte[] copy = encoded.clone();
+        if (!new MlKemEngine(parameterSet).isValidDecapsulationKey(copy)) {
+            throw new IllegalArgumentException("decapsulation key failed the FIPS 203 input validation");
+        }
+        return new MlKemPrivateKey(parameterSet, copy);
+    }
+
+    /**
+     * Wraps a key the library has just generated or already validated. Package private so that
+     * callers can never bypass the FIPS 203 input validation.
+     *
+     * @param parameterSet the parameter set the key belongs to
+     * @param encoded the already validated encoding
+     * @return an immutable key object holding its own copy of the encoding
+     */
+    static MlKemPrivateKey fromValidatedEncoding(MlKemParameterSet parameterSet, byte[] encoded) {
         return new MlKemPrivateKey(parameterSet, encoded.clone());
     }
 
@@ -70,7 +90,7 @@ public final class MlKemPrivateKey {
     public MlKemPublicKey getPublicKey() {
         int start = 384 * parameterSet.rank();
         int end = 768 * parameterSet.rank() + 32;
-        return MlKemPublicKey.fromEncoded(parameterSet, Arrays.copyOfRange(encoded, start, end));
+        return MlKemPublicKey.fromValidatedEncoding(parameterSet, Arrays.copyOfRange(encoded, start, end));
     }
 
     @Override
@@ -81,7 +101,8 @@ public final class MlKemPrivateKey {
         if (!(other instanceof MlKemPrivateKey that)) {
             return false;
         }
-        return parameterSet == that.parameterSet && Arrays.equals(encoded, that.encoded);
+        // MessageDigest.isEqual compares without leaking the position of the first difference.
+        return parameterSet == that.parameterSet && MessageDigest.isEqual(encoded, that.encoded);
     }
 
     @Override

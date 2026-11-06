@@ -7,6 +7,30 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-06
+
+### Changed
+
+- `MlKemPublicKey.fromEncoded` and `MlKemPrivateKey.fromEncoded` now run the FIPS 203 input
+  validation (modulus check, plus the hash check for decapsulation keys) when the key is
+  imported. Invalid keys can no longer be wrapped, and encapsulation and decapsulation no longer
+  repeat the check on every operation.
+- `MlKemPrivateKey.equals` and `MlKemEncapsulation.equals` compare key material and shared
+  secrets in constant time.
+- Spring is now an optional dependency in the published POM. Applications that only use the
+  ML-KEM core no longer inherit Spring on their classpath.
+
+### Fixed
+
+- `HybridCipher.envelopeLength` and `HybridCipher.encrypt` now reject plaintext sizes whose
+  envelope would not fit in an `int`, instead of overflowing and returning a negative length.
+
+### Security
+
+- The ML-KEM key generation, encapsulation and decapsulation paths now wipe seed expansions,
+  intermediate polynomials, the unpacked decapsulation key and candidate shared secrets once
+  they are no longer needed, matching what `HybridCipher` already did for its own secrets.
+
 ## [0.1.0] - 2026-11-03
 
 ### Added
@@ -31,5 +55,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - GPG-signed artifacts published to Maven Central from the release workflow, with an opt-in
   `central` profile so that local builds do not need a signing key.
 
-[Unreleased]: https://github.com/manalejandro/postquantum/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/manalejandro/postquantum/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/manalejandro/postquantum/releases/tag/v0.1.1
 [0.1.0]: https://github.com/manalejandro/postquantum/releases/tag/v0.1.0

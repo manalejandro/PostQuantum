@@ -210,10 +210,54 @@ class MlKemTest {
         nonCanonical[0] = (byte) 0xFF;
         nonCanonical[1] = (byte) 0x0F;
         assertThat(mlKem.isValidEncapsulationKey(nonCanonical)).isFalse();
-        assertThatThrownBy(() -> mlKem.encapsulate(MlKemPublicKey.fromEncoded(
-                MlKemParameterSet.ML_KEM_768, nonCanonical)))
+        assertThatThrownBy(() -> MlKemPublicKey.fromEncoded(MlKemParameterSet.ML_KEM_768, nonCanonical))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("input validation");
+    }
+
+    @Test
+    void validatesKeysWhenTheyAreImported() {
+        MlKem mlKem = MlKem.getInstance(MlKemParameterSet.ML_KEM_768);
+        MlKemKeyPair keyPair = mlKem.generateKeyPair();
+
+        // The embedded H(ek) no longer matches after modifying the stored public key.
+        byte[] tamperedPrivate = keyPair.privateKey().getEncoded();
+        tamperedPrivate[384 * MlKemParameterSet.ML_KEM_768.rank() + 10] ^= 0x01;
+        assertThatThrownBy(() -> MlKemPrivateKey.fromEncoded(MlKemParameterSet.ML_KEM_768, tamperedPrivate))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("input validation");
+
+        // A single flipped coefficient of the encapsulation key breaks the modulus check.
+        byte[] tamperedPublic = keyPair.publicKey().getEncoded();
+        tamperedPublic[0] = (byte) 0xFF;
+        tamperedPublic[1] = (byte) 0x0F;
+        assertThatThrownBy(() -> MlKemPublicKey.fromEncoded(MlKemParameterSet.ML_KEM_768, tamperedPublic))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("input validation");
+    }
+
+    @Test
+    void doesNotModifyCallerSuppliedInputs() {
+        MlKem mlKem = MlKem.getInstance(MlKemParameterSet.ML_KEM_768);
+
+        byte[] seed = new byte[64];
+        for (int i = 0; i < seed.length; i++) {
+            seed[i] = (byte) i;
+        }
+        byte[] seedBefore = seed.clone();
+        MlKemKeyPair keyPair = mlKem.generateKeyPair(seed);
+        assertThat(seed).isEqualTo(seedBefore);
+
+        byte[] ciphertext = mlKem.encapsulate(keyPair.publicKey()).getCiphertext();
+        byte[] ciphertextBefore = ciphertext.clone();
+        mlKem.decapsulate(keyPair.privateKey(), ciphertext);
+        assertThat(ciphertext).isEqualTo(ciphertextBefore);
+
+        byte[] encodedKey = keyPair.privateKey().getEncoded();
+        byte[] encodedKeyBefore = encodedKey.clone();
+        MlKemPrivateKey imported = MlKemPrivateKey.fromEncoded(MlKemParameterSet.ML_KEM_768, encodedKey);
+        assertThat(encodedKey).isEqualTo(encodedKeyBefore);
+        assertThat(imported).isEqualTo(keyPair.privateKey());
     }
 
     @Test
@@ -313,6 +357,23 @@ class MlKemTest {
         assertThat(encapsulation.getCiphertext()).isNotSameAs(encapsulation.getCiphertext());
         assertThat(encapsulation.getSharedSecret()).isNotSameAs(encapsulation.getSharedSecret());
         assertThat(mlKem.toString()).isEqualTo("MlKem[ML-KEM-512]");
+    }
+
+    @Test
+    void encapsulationEqualityComparesEveryByte() {
+        byte[] ciphertext = new byte[768];
+        byte[] sharedSecret = new byte[32];
+        MlKemEncapsulation encapsulation = MlKemEncapsulation.of(ciphertext, sharedSecret);
+
+        assertThat(encapsulation).isEqualTo(MlKemEncapsulation.of(ciphertext.clone(), sharedSecret.clone()));
+
+        byte[] otherCiphertext = ciphertext.clone();
+        otherCiphertext[0] ^= 0x01;
+        assertThat(encapsulation).isNotEqualTo(MlKemEncapsulation.of(otherCiphertext, sharedSecret.clone()));
+
+        byte[] otherSecret = sharedSecret.clone();
+        otherSecret[31] ^= 0x01;
+        assertThat(encapsulation).isNotEqualTo(MlKemEncapsulation.of(ciphertext.clone(), otherSecret));
     }
 
     @Test

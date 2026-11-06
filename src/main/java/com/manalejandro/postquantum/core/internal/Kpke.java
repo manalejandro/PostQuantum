@@ -42,29 +42,36 @@ final class Kpke {
 
         int[][] s = new int[k][];
         int[][] e = new int[k][];
-        int counter = 0;
-        for (int i = 0; i < k; i++) {
-            s[i] = Sampling.samplePolyCbd(Sampling.prf(sigma, counter++, parameters.eta1()), parameters.eta1());
-        }
-        for (int i = 0; i < k; i++) {
-            e[i] = Sampling.samplePolyCbd(Sampling.prf(sigma, counter++, parameters.eta1()), parameters.eta1());
-        }
-
         int[][] sHat = new int[k][];
         int[][] eHat = new int[k][];
-        for (int i = 0; i < k; i++) {
-            sHat[i] = Ntt.forward(s[i]);
-            eHat[i] = Ntt.forward(e[i]);
-        }
+        try {
+            int counter = 0;
+            for (int i = 0; i < k; i++) {
+                s[i] = Sampling.samplePolyCbd(Sampling.prf(sigma, counter++, parameters.eta1()), parameters.eta1());
+            }
+            for (int i = 0; i < k; i++) {
+                e[i] = Sampling.samplePolyCbd(Sampling.prf(sigma, counter++, parameters.eta1()), parameters.eta1());
+            }
 
-        int[][] tHat = new int[k][];
-        for (int i = 0; i < k; i++) {
-            tHat[i] = Ntt.add(Ntt.multiplyAccumulate(aHat[i], sHat), eHat[i]);
-        }
+            for (int i = 0; i < k; i++) {
+                sHat[i] = Ntt.forward(s[i]);
+                eHat[i] = Ntt.forward(e[i]);
+            }
 
-        byte[] encapsulationKey = Bytes.concat(Encoding.encodeVector(12, tHat), rho);
-        byte[] decapsulationKey = Encoding.encodeVector(12, sHat);
-        return new byte[][]{encapsulationKey, decapsulationKey};
+            int[][] tHat = new int[k][];
+            for (int i = 0; i < k; i++) {
+                tHat[i] = Ntt.add(Ntt.multiplyAccumulate(aHat[i], sHat), eHat[i]);
+            }
+
+            byte[] encapsulationKey = Bytes.concat(Encoding.encodeVector(12, tHat), rho);
+            byte[] decapsulationKey = Encoding.encodeVector(12, sHat);
+            return new byte[][]{encapsulationKey, decapsulationKey};
+        } finally {
+            // The seed expansion and the noise polynomials are secret; the encoded keys returned
+            // above are independent copies, so they can be cleared before the method exits.
+            Bytes.wipe(expandedSeed, expanded, sigma);
+            Bytes.wipeVectors(s, e, sHat, eHat);
+        }
     }
 
     /** FIPS 203, Algorithm 14: K-PKE.Encrypt. */
@@ -79,32 +86,39 @@ final class Kpke {
 
         int[][] r = new int[k][];
         int[][] e1 = new int[k][];
-        int counter = 0;
-        for (int i = 0; i < k; i++) {
-            r[i] = Sampling.samplePolyCbd(Sampling.prf(randomness, counter++, parameters.eta1()), parameters.eta1());
-        }
-        for (int i = 0; i < k; i++) {
-            e1[i] = Sampling.samplePolyCbd(Sampling.prf(randomness, counter++, parameters.eta2()), parameters.eta2());
-        }
-        int[] e2 = Sampling.samplePolyCbd(Sampling.prf(randomness, counter, parameters.eta2()), parameters.eta2());
-
         int[][] rHat = new int[k][];
-        for (int i = 0; i < k; i++) {
-            rHat[i] = Ntt.forward(r[i]);
+        int[] e2 = null;
+        int[] messagePolynomial = null;
+        try {
+            int counter = 0;
+            for (int i = 0; i < k; i++) {
+                r[i] = Sampling.samplePolyCbd(Sampling.prf(randomness, counter++, parameters.eta1()), parameters.eta1());
+            }
+            for (int i = 0; i < k; i++) {
+                e1[i] = Sampling.samplePolyCbd(Sampling.prf(randomness, counter++, parameters.eta2()), parameters.eta2());
+            }
+            e2 = Sampling.samplePolyCbd(Sampling.prf(randomness, counter, parameters.eta2()), parameters.eta2());
+
+            for (int i = 0; i < k; i++) {
+                rHat[i] = Ntt.forward(r[i]);
+            }
+
+            int[][] u = new int[k][];
+            for (int i = 0; i < k; i++) {
+                int[] product = Ntt.multiplyTransposeAccumulate(aHat, i, rHat);
+                u[i] = Ntt.add(Ntt.inverse(product), e1[i]);
+            }
+
+            messagePolynomial = Encoding.decompress(1, Encoding.decode(1, message, 0));
+            int[] v = Ntt.add(Ntt.add(Ntt.inverse(Ntt.multiplyAccumulate(tHat, rHat)), e2), messagePolynomial);
+
+            byte[] c1 = Encoding.encodeVector(du, compressVector(du, u));
+            byte[] c2 = Encoding.encode(dv, Encoding.compress(dv, v));
+            return Bytes.concat(c1, c2);
+        } finally {
+            Bytes.wipeVectors(r, e1, rHat);
+            Bytes.wipe(e2, messagePolynomial);
         }
-
-        int[][] u = new int[k][];
-        for (int i = 0; i < k; i++) {
-            int[] product = Ntt.multiplyTransposeAccumulate(aHat, i, rHat);
-            u[i] = Ntt.add(Ntt.inverse(product), e1[i]);
-        }
-
-        int[] messagePolynomial = Encoding.decompress(1, Encoding.decode(1, message, 0));
-        int[] v = Ntt.add(Ntt.add(Ntt.inverse(Ntt.multiplyAccumulate(tHat, rHat)), e2), messagePolynomial);
-
-        byte[] c1 = Encoding.encodeVector(du, compressVector(du, u));
-        byte[] c2 = Encoding.encode(dv, Encoding.compress(dv, v));
-        return Bytes.concat(c1, c2);
     }
 
     /** FIPS 203, Algorithm 15: K-PKE.Decrypt. */
@@ -121,17 +135,24 @@ final class Kpke {
         int[] v = Encoding.decompress(dv, Encoding.decode(dv, ciphertext, 32 * du * k));
 
         int[][] sHat = Encoding.decodeVector(12, decapsulationKey, 0, k);
-        int[][] uHat = new int[k][];
-        for (int i = 0; i < k; i++) {
-            uHat[i] = Ntt.forward(uDecompressed[i]);
-        }
+        int[] product = null;
+        int[] w = null;
+        try {
+            int[][] uHat = new int[k][];
+            for (int i = 0; i < k; i++) {
+                uHat[i] = Ntt.forward(uDecompressed[i]);
+            }
 
-        int[] product = Ntt.inverse(Ntt.multiplyAccumulate(sHat, uHat));
-        int[] w = new int[Ntt.N];
-        for (int i = 0; i < Ntt.N; i++) {
-            w[i] = Ntt.mod(v[i] - product[i]);
+            product = Ntt.inverse(Ntt.multiplyAccumulate(sHat, uHat));
+            w = new int[Ntt.N];
+            for (int i = 0; i < Ntt.N; i++) {
+                w[i] = Ntt.mod(v[i] - product[i]);
+            }
+            return Encoding.encode(1, Encoding.compress(1, w));
+        } finally {
+            Bytes.wipeVectors(sHat);
+            Bytes.wipe(product, w);
         }
-        return Encoding.encode(1, Encoding.compress(1, w));
     }
 
     private static int[][] compressVector(int bits, int[][] polynomials) {

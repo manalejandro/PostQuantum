@@ -6,6 +6,7 @@
 
 package com.manalejandro.postquantum.core;
 
+import java.security.MessageDigest;
 import java.util.Arrays;
 import java.util.Objects;
 
@@ -49,7 +50,8 @@ public final class MlKemEncapsulation {
         if (!(other instanceof MlKemEncapsulation that)) {
             return false;
         }
-        return Arrays.equals(ciphertext, that.ciphertext) && Arrays.equals(sharedSecret, that.sharedSecret);
+        return Arrays.equals(ciphertext, that.ciphertext)
+                && MessageDigest.isEqual(sharedSecret, that.sharedSecret);
     }
 
     @Override

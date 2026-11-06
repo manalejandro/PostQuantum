@@ -176,6 +176,8 @@ public final class HybridCipher {
         Objects.requireNonNull(publicKey, "publicKey must not be null");
         Objects.requireNonNull(plaintext, "plaintext must not be null");
         Objects.requireNonNull(associatedData, "associatedData must not be null");
+        // Fail before consuming randomness or doing KEM work if the envelope cannot be sized.
+        int envelopeSize = checkedEnvelopeLength(getParameterSet().ciphertextLength(), plaintext.length);
 
         MlKemEncapsulation encapsulation = mlKem.encapsulate(publicKey);
         byte[] kemCiphertext = encapsulation.getCiphertext();
@@ -194,7 +196,7 @@ public final class HybridCipher {
             aesKey = Hkdf.deriveKey(sharedSecret, kemCiphertext, hkdfInfo(), KEY_LENGTH);
             byte[] sealed = aesGcm(Cipher.ENCRYPT_MODE, aesKey, nonce, header, associatedData, plaintext);
 
-            byte[] envelope = new byte[HEADER_LENGTH + kemCiphertext.length + sealed.length];
+            byte[] envelope = new byte[envelopeSize];
             System.arraycopy(header, 0, envelope, 0, HEADER_LENGTH);
             System.arraycopy(kemCiphertext, 0, envelope, KEM_CIPHERTEXT_OFFSET, kemCiphertext.length);
             System.arraycopy(sealed, 0, envelope, KEM_CIPHERTEXT_OFFSET + kemCiphertext.length, sealed.length);
@@ -322,13 +324,35 @@ public final class HybridCipher {
      * @param parameterSet the parameter set in use
      * @param plaintextLength the plaintext length in bytes
      * @return the total envelope length in bytes
+     * @throws IllegalArgumentException when the length is negative or the envelope would not fit
+     *     in an {@code int}
      */
     public static int envelopeLength(MlKemParameterSet parameterSet, int plaintextLength) {
         Objects.requireNonNull(parameterSet, "parameterSet must not be null");
         if (plaintextLength < 0) {
             throw new IllegalArgumentException("plaintextLength must not be negative");
         }
-        return HEADER_LENGTH + parameterSet.ciphertextLength() + plaintextLength + TAG_LENGTH;
+        return checkedEnvelopeLength(parameterSet.ciphertextLength(), plaintextLength);
+    }
+
+    /**
+     * Adds the fixed envelope overhead to the plaintext length, failing instead of silently
+     * overflowing when the result does not fit in an {@code int}.
+     *
+     * @param kemCiphertextLength the ML-KEM ciphertext length for the parameter set in use
+     * @param plaintextLength the plaintext length in bytes
+     * @return the total envelope length in bytes
+     * @throws IllegalArgumentException when the sum overflows
+     */
+    private static int checkedEnvelopeLength(int kemCiphertextLength, int plaintextLength) {
+        try {
+            int overhead = Math.addExact(HEADER_LENGTH, kemCiphertextLength);
+            int sealed = Math.addExact(plaintextLength, TAG_LENGTH);
+            return Math.addExact(overhead, sealed);
+        } catch (ArithmeticException ex) {
+            throw new IllegalArgumentException("envelope length exceeds Integer.MAX_VALUE for a "
+                    + plaintextLength + " byte plaintext", ex);
+        }
     }
 
     private byte[] hkdfInfo() {

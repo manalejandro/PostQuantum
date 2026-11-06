@@ -11,7 +11,7 @@
 	</parent>
 	<groupId>com.manalejandro</groupId>
 	<artifactId>postquantum</artifactId>
-	<version>0.1.0</version>
+	<version>0.1.1</version>
 	<packaging>jar</packaging>
 	<name>PostQuantum</name>
 	<description>FIPS 203 (ML-KEM) post-quantum key encapsulation and hybrid
@@ -48,9 +48,15 @@
 	</properties>
 
 	<dependencies>
+		<!--
+			Spring is a provided (optional) dependency: applications that use the library as a
+			plain crypto toolkit must not inherit Spring on their classpath, and applications that
+			do use Spring Boot already have these artifacts through the starter.
+		-->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-autoconfigure</artifactId>
+			<optional>true</optional>
 		</dependency>
 
 		<dependency>

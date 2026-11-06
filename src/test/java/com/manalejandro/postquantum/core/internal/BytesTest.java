@@ -39,4 +39,23 @@ class BytesTest {
         assertThatThrownBy(() -> Bytes.constantTimeSelect(-1, left, new byte[2]))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void wipesByteAndIntArrays() {
+        byte[] first = {1, 2, 3};
+        byte[] second = {4, 5};
+        Bytes.wipe(first, null, second);
+        assertThat(first).containsOnly(0);
+        assertThat(second).containsOnly(0);
+
+        int[] coefficients = {7, 8, 9};
+        Bytes.wipe(coefficients);
+        assertThat(coefficients).containsOnly(0);
+
+        int[][] vector = {{1, 2}, {3, 4}};
+        Bytes.wipeVectors(vector, null);
+        for (int[] polynomial : vector) {
+            assertThat(polynomial).containsOnly(0);
+        }
+    }
 }

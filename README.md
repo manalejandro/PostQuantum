@@ -86,7 +86,8 @@ plus a Spring Boot auto-configuration so applications can inject either one as a
 | Build | Maven 3.9+ or the bundled `./mvnw` |
 
 The ML-KEM core has no framework dependency at all; it can be used from plain Java, Jakarta EE,
-Quarkus, Micronaut or any other runtime. Spring is only needed for the `autoconfigure` package.
+Quarkus, Micronaut or any other runtime. Spring is only needed for the `autoconfigure` package and
+is declared as an optional dependency, so it is never pulled in transitively.
 
 ## Installation
 
@@ -99,14 +100,14 @@ dependency:
 <dependency>
     <groupId>com.manalejandro</groupId>
     <artifactId>postquantum</artifactId>
-    <version>0.1.0</version>
+    <version>0.1.1</version>
 </dependency>
 ```
 
 **Gradle**
 
 ```kotlin
-implementation("com.manalejandro:postquantum:0.1.0")
+implementation("com.manalejandro:postquantum:0.1.1")
 ```
 
 To build from source instead, clone the repository and install it into your local repository:
@@ -370,6 +371,9 @@ On Spring Boot 3.x the beans are still auto-configured, but the indicator is not
 - **Key management is your responsibility.** Private keys are returned as raw bytes. Store them
   encrypted, rotate them, and never log them. `toString()` implementations redact key material
   and shared secrets.
+- **Imported keys are validated.** `MlKemPublicKey.fromEncoded` and `MlKemPrivateKey.fromEncoded`
+  run the FIPS 203 input checks (length, modulus check and, for decapsulation keys, the hash
+  check) and reject malformed keys with `IllegalArgumentException`.
 - **Envelope size.** ML-KEM public keys and ciphertexts are large. Budget roughly 1.2 KB of
   overhead per envelope for ML-KEM-768 (18 byte header + 1088 byte KEM ciphertext + 16 byte tag)
   before the payload.
@@ -426,9 +430,9 @@ accept it, and then creates the GitHub release with the jars, the POM, their `.a
 2. Commit and push `main`, then create and push the tag:
 
    ```bash
-   git tag -a v0.1.0 -m "PostQuantum 0.1.0"
+   git tag -a v0.1.1 -m "PostQuantum 0.1.1"
    git push origin main
-   git push origin v0.1.0
+   git push origin v0.1.1
    ```
 
 3. The workflow verifies that the tag matches the project version before doing anything else. It

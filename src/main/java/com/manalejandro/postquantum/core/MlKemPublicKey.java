@@ -6,6 +6,8 @@
 
 package com.manalejandro.postquantum.core;
 
+import com.manalejandro.postquantum.core.internal.MlKemEngine;
+
 import java.util.Arrays;
 import java.util.Objects;
 
@@ -32,6 +34,7 @@ public final class MlKemPublicKey {
      * @param encoded the FIPS 203 encoding of the key
      * @return an immutable key object
      * @throws IllegalArgumentException when the encoded length does not match the parameter set
+     *     or the key fails the FIPS 203 input validation
      */
     public static MlKemPublicKey fromEncoded(MlKemParameterSet parameterSet, byte[] encoded) {
         Objects.requireNonNull(parameterSet, "parameterSet must not be null");
@@ -40,6 +43,22 @@ public final class MlKemPublicKey {
             throw new IllegalArgumentException("invalid encapsulation key length: expected "
                     + parameterSet.encapsulationKeyLength() + " bytes but got " + encoded.length);
         }
+        byte[] copy = encoded.clone();
+        if (!new MlKemEngine(parameterSet).isValidEncapsulationKey(copy)) {
+            throw new IllegalArgumentException("encapsulation key failed the FIPS 203 input validation");
+        }
+        return new MlKemPublicKey(parameterSet, copy);
+    }
+
+    /**
+     * Wraps a key the library has just generated or already validated. Package private so that
+     * callers can never bypass the FIPS 203 input validation.
+     *
+     * @param parameterSet the parameter set the key belongs to
+     * @param encoded the already validated encoding
+     * @return an immutable key object holding its own copy of the encoding
+     */
+    static MlKemPublicKey fromValidatedEncoding(MlKemParameterSet parameterSet, byte[] encoded) {
         return new MlKemPublicKey(parameterSet, encoded.clone());
     }
 

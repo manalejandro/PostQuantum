@@ -6,10 +6,56 @@
 
 package com.manalejandro.postquantum.core.internal;
 
+import java.util.Arrays;
+
 /** Small byte array helpers used by the ML-KEM engine. */
 final class Bytes {
 
     private Bytes() {
+    }
+
+    /**
+     * Overwrites every byte of the given arrays with zero. Null entries are ignored so that
+     * callers can pass partially initialised locals from a {@code finally} block.
+     *
+     * @param arrays the arrays to clear
+     */
+    static void wipe(byte[]... arrays) {
+        for (byte[] array : arrays) {
+            if (array != null) {
+                Arrays.fill(array, (byte) 0);
+            }
+        }
+    }
+
+    /**
+     * Overwrites every coefficient of the given arrays with zero. Null entries are ignored.
+     *
+     * @param arrays the arrays to clear
+     */
+    static void wipe(int[]... arrays) {
+        for (int[] array : arrays) {
+            if (array != null) {
+                Arrays.fill(array, 0);
+            }
+        }
+    }
+
+    /**
+     * Overwrites every coefficient of the given vectors of polynomials with zero.
+     *
+     * @param vectors the vectors to clear
+     */
+    static void wipeVectors(int[][]... vectors) {
+        for (int[][] vector : vectors) {
+            if (vector != null) {
+                for (int[] polynomial : vector) {
+                    if (polynomial != null) {
+                        Arrays.fill(polynomial, 0);
+                    }
+                }
+            }
+        }
     }
 
     static byte[] concat(byte[]... parts) {

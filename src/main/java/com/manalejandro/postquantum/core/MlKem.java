@@ -92,9 +92,14 @@ public final class MlKem {
     public MlKemKeyPair generateKeyPair() {
         byte[] d = new byte[SEED_LENGTH];
         byte[] z = new byte[SEED_LENGTH];
-        secureRandom.nextBytes(d);
-        secureRandom.nextBytes(z);
-        return generateKeyPair(d, z);
+        try {
+            secureRandom.nextBytes(d);
+            secureRandom.nextBytes(z);
+            return generateKeyPair(d, z);
+        } finally {
+            Arrays.fill(d, (byte) 0);
+            Arrays.fill(z, (byte) 0);
+        }
     }
 
     /**
@@ -116,9 +121,14 @@ public final class MlKem {
             throw new IllegalArgumentException("seed must be " + (2 * SEED_LENGTH)
                     + " bytes long but got " + seed.length);
         }
-        return generateKeyPair(
-                Arrays.copyOfRange(seed, 0, SEED_LENGTH),
-                Arrays.copyOfRange(seed, SEED_LENGTH, 2 * SEED_LENGTH));
+        byte[] d = Arrays.copyOfRange(seed, 0, SEED_LENGTH);
+        byte[] z = Arrays.copyOfRange(seed, SEED_LENGTH, 2 * SEED_LENGTH);
+        try {
+            return generateKeyPair(d, z);
+        } finally {
+            Arrays.fill(d, (byte) 0);
+            Arrays.fill(z, (byte) 0);
+        }
     }
 
     /**
@@ -127,19 +137,18 @@ public final class MlKem {
      *
      * @param publicKey the recipient encapsulation key
      * @return the ciphertext to transmit and the shared secret to use locally
-     * @throws IllegalArgumentException when the key uses another parameter set or fails the
-     *     FIPS 203 modulus check
+     * @throws IllegalArgumentException when the key uses another parameter set
      */
     public MlKemEncapsulation encapsulate(MlKemPublicKey publicKey) {
         Objects.requireNonNull(publicKey, "publicKey must not be null");
         requireSameParameterSet(publicKey.getParameterSet());
-        byte[] encodedKey = publicKey.getEncoded();
-        if (!engine.isValidEncapsulationKey(encodedKey)) {
-            throw new IllegalArgumentException("encapsulation key failed the FIPS 203 input validation");
-        }
         byte[] message = new byte[SEED_LENGTH];
-        secureRandom.nextBytes(message);
-        return encapsulateDeterministic(publicKey, message);
+        try {
+            secureRandom.nextBytes(message);
+            return encapsulateDeterministic(publicKey, message);
+        } finally {
+            Arrays.fill(message, (byte) 0);
+        }
     }
 
     /**
@@ -153,8 +162,8 @@ public final class MlKem {
      * @param privateKey the recipient decapsulation key
      * @param ciphertext the ciphertext produced by {@link #encapsulate(MlKemPublicKey)}
      * @return the 32 byte shared secret
-     * @throws IllegalArgumentException when the key or ciphertext is malformed or fails the
-     *     FIPS 203 input validation
+     * @throws IllegalArgumentException when the key belongs to another parameter set or the
+     *     ciphertext has the wrong length
      */
     public byte[] decapsulate(MlKemPrivateKey privateKey, byte[] ciphertext) {
         Objects.requireNonNull(privateKey, "privateKey must not be null");
@@ -165,10 +174,11 @@ public final class MlKem {
                     + parameterSet.ciphertextLength() + " bytes but got " + ciphertext.length);
         }
         byte[] encodedKey = privateKey.getEncoded();
-        if (!engine.isValidDecapsulationKey(encodedKey)) {
-            throw new IllegalArgumentException("decapsulation key failed the FIPS 203 input validation");
+        try {
+            return engine.decapsulate(encodedKey, ciphertext);
+        } finally {
+            Arrays.fill(encodedKey, (byte) 0);
         }
-        return engine.decapsulate(encodedKey, ciphertext);
     }
 
     /**
@@ -196,9 +206,14 @@ public final class MlKem {
     /** FIPS 203, Algorithm 19 with caller supplied seeds. Used by the ACVP test vectors. */
     MlKemKeyPair generateKeyPair(byte[] d, byte[] z) {
         byte[][] keys = engine.keyGen(d, z);
-        return new MlKemKeyPair(
-                MlKemPublicKey.fromEncoded(parameterSet, keys[0]),
-                MlKemPrivateKey.fromEncoded(parameterSet, keys[1]));
+        try {
+            return new MlKemKeyPair(
+                    MlKemPublicKey.fromValidatedEncoding(parameterSet, keys[0]),
+                    MlKemPrivateKey.fromValidatedEncoding(parameterSet, keys[1]));
+        } finally {
+            // Both value objects hold their own copy, so the engine buffer can be cleared.
+            Arrays.fill(keys[1], (byte) 0);
+        }
     }
 
     /** FIPS 203, Algorithm 20 with a caller supplied message. Used by the ACVP test vectors. */
@@ -206,7 +221,11 @@ public final class MlKem {
         Objects.requireNonNull(publicKey, "publicKey must not be null");
         requireSameParameterSet(publicKey.getParameterSet());
         byte[][] result = engine.encapsulate(publicKey.getEncoded(), message);
-        return MlKemEncapsulation.of(result[0], result[1]);
+        try {
+            return MlKemEncapsulation.of(result[0], result[1]);
+        } finally {
+            Arrays.fill(result[1], (byte) 0);
+        }
     }
 
     private void requireSameParameterSet(MlKemParameterSet other) {

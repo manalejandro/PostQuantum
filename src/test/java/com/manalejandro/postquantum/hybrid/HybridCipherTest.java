@@ -236,6 +236,23 @@ class HybridCipherTest {
     }
 
     @Test
+    void rejectsEnvelopeLengthsThatWouldOverflow() {
+        for (MlKemParameterSet parameterSet : MlKemParameterSet.values()) {
+            int overhead = HybridCipher.HEADER_LENGTH + parameterSet.ciphertextLength() + HybridCipher.TAG_LENGTH;
+            assertThat(HybridCipher.envelopeLength(parameterSet, Integer.MAX_VALUE - overhead))
+                    .as("%s at the maximum representable length", parameterSet)
+                    .isEqualTo(Integer.MAX_VALUE);
+
+            assertThatThrownBy(() -> HybridCipher.envelopeLength(parameterSet, Integer.MAX_VALUE - overhead + 1))
+                    .as("%s one byte past the maximum", parameterSet)
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("Integer.MAX_VALUE");
+        }
+        assertThatThrownBy(() -> HybridCipher.envelopeLength(MlKemParameterSet.ML_KEM_768, Integer.MAX_VALUE))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void canReuseAnExistingMlKemInstance() {
         MlKem mlKem = MlKem.getInstance(MlKemParameterSet.ML_KEM_768);
         HybridCipher cipher = HybridCipher.using(mlKem);

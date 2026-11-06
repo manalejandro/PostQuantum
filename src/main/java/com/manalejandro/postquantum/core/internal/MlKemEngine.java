@@ -47,6 +47,9 @@ public final class MlKemEngine {
                 encapsulationKey,
                 Keccak.sha3_256(encapsulationKey),
                 z);
+        // The PKE decapsulation key is secret and has just been copied into the full ML-KEM
+        // decapsulation key, so the intermediate copy can be cleared.
+        Bytes.wipe(pkeKeys[1]);
         return new byte[][]{encapsulationKey, decapsulationKey};
     }
 
@@ -63,8 +66,12 @@ public final class MlKemEngine {
         byte[] keyAndRandomness = Keccak.sha3_512(Bytes.concat(message, Keccak.sha3_256(encapsulationKey)));
         byte[] key = Arrays.copyOfRange(keyAndRandomness, 0, 32);
         byte[] randomness = Arrays.copyOfRange(keyAndRandomness, 32, 64);
-        byte[] ciphertext = kpke.encrypt(encapsulationKey, message, randomness);
-        return new byte[][]{ciphertext, key};
+        try {
+            byte[] ciphertext = kpke.encrypt(encapsulationKey, message, randomness);
+            return new byte[][]{ciphertext, key};
+        } finally {
+            Bytes.wipe(keyAndRandomness, randomness);
+        }
     }
 
     /**
@@ -82,16 +89,29 @@ public final class MlKemEngine {
         byte[] encapsulationKey = Arrays.copyOfRange(decapsulationKey, 384 * k, 768 * k + 32);
         byte[] storedHash = Arrays.copyOfRange(decapsulationKey, 768 * k + 32, 768 * k + 64);
         byte[] z = Arrays.copyOfRange(decapsulationKey, 768 * k + 64, 768 * k + 96);
+        byte[] message = null;
+        byte[] keyAndRandomness = null;
+        byte[] candidateKey = null;
+        byte[] randomness = null;
+        byte[] rejectionKey = null;
+        byte[] recomputedCiphertext = null;
+        try {
+            message = kpke.decrypt(decapsulationKeyPke, ciphertext);
+            keyAndRandomness = Keccak.sha3_512(Bytes.concat(message, storedHash));
+            candidateKey = Arrays.copyOfRange(keyAndRandomness, 0, 32);
+            randomness = Arrays.copyOfRange(keyAndRandomness, 32, 64);
+            rejectionKey = Keccak.shake256(Bytes.concat(z, ciphertext), 32);
 
-        byte[] message = kpke.decrypt(decapsulationKeyPke, ciphertext);
-        byte[] keyAndRandomness = Keccak.sha3_512(Bytes.concat(message, storedHash));
-        byte[] candidateKey = Arrays.copyOfRange(keyAndRandomness, 0, 32);
-        byte[] randomness = Arrays.copyOfRange(keyAndRandomness, 32, 64);
-        byte[] rejectionKey = Keccak.shake256(Bytes.concat(z, ciphertext), 32);
-
-        byte[] recomputedCiphertext = kpke.encrypt(encapsulationKey, message, randomness);
-        int mask = Bytes.constantTimeMask(ciphertext, recomputedCiphertext);
-        return Bytes.constantTimeSelect(mask, candidateKey, rejectionKey);
+            recomputedCiphertext = kpke.encrypt(encapsulationKey, message, randomness);
+            int mask = Bytes.constantTimeMask(ciphertext, recomputedCiphertext);
+            return Bytes.constantTimeSelect(mask, candidateKey, rejectionKey);
+        } finally {
+            // Every intermediate that can hold the private key, the message or a candidate shared
+            // secret is cleared on both the success and the failure path.
+            Bytes.wipe(decapsulationKeyPke, z);
+            Bytes.wipe(message, keyAndRandomness, candidateKey, randomness, rejectionKey,
+                    recomputedCiphertext);
+        }
     }
 
     /**
